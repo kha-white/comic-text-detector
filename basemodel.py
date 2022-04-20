@@ -1,18 +1,15 @@
-from matplotlib import lines
-from utils.general import CUDA, DEVICE
-from models.yolov5.yolo import Model
-import torch
-import cv2
-import numpy as np
-from models.yolov5.yolo import load_yolov5_ckpt
-from utils.yolov5_utils import fuse_conv_and_bn
-import glob
-import torch.nn as nn
-from utils.weight_init import init_weights
-from models.yolov5.common import C3, Conv
-from torchsummary import summary
-import torch.nn.functional as F
 import copy
+
+import cv2
+import torch
+import torch.nn as nn
+from torchsummary import summary
+
+from comic_text_detector.models.yolov5.common import C3, Conv
+from comic_text_detector.models.yolov5.yolo import load_yolov5_ckpt
+from comic_text_detector.utils.general import DEVICE
+from comic_text_detector.utils.weight_init import init_weights
+from comic_text_detector.utils.yolov5_utils import fuse_conv_and_bn
 
 TEXTDET_MASK = 0
 TEXTDET_DET = 1

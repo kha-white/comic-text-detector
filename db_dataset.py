@@ -1,25 +1,23 @@
-import numpy as np
-import yaml
-import torch
 import glob
 import os
 import os.path as osp
 import random
 from itertools import repeat
-from multiprocessing.pool import Pool, ThreadPool
+from multiprocessing.pool import ThreadPool
 from pathlib import Path
-from threading import Thread
+
 import cv2
-from torch.utils.data import Dataset
-from tqdm import tqdm
-from pathlib import Path
-from torchvision import transforms
-from torch.utils.data import DataLoader, Dataset, dataloader
-from utils.general import LOGGER, Loggers, CUDA, DEVICE
-from utils.db_utils import MakeBorderMap, MakeShrinkMap
-from seg_dataset import augment_hsv
-from utils.imgproc_utils import rotate_polygons, letterbox, resize_keepasp
+import numpy as np
+import torch
+import yaml
 from PIL import Image
+from torch.utils.data import DataLoader, Dataset
+from torchvision import transforms
+from tqdm import tqdm
+
+from comic_text_detector.seg_dataset import augment_hsv
+from comic_text_detector.utils.db_utils import MakeBorderMap, MakeShrinkMap
+from comic_text_detector.utils.imgproc_utils import rotate_polygons, letterbox, resize_keepasp
 
 WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))  # DPP
 NUM_THREADS = min(8, max(1, os.cpu_count() - 1))  # number of multiprocessing threads

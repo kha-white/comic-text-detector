@@ -4,7 +4,6 @@ segmentron/solver/loss.py (Apache-2.0 License)"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.modules.loss import BCEWithLogitsLoss
 
 
 class BinaryDiceLoss(nn.Module):

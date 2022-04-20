@@ -1,23 +1,26 @@
-import torch
 from torch.optim import SGD, Adam, lr_scheduler
-from tqdm import tqdm
 import math
-from torch.cuda import amp
-import torch
-from utils.loss import BinaryDiceLoss
-import torch.nn as nn
-import yaml
-from basemodel import TextDetector
-import numpy as np
-from datetime import datetime
-from torchsummary import summary
-import numexpr
 import os
 import shutil
+from datetime import datetime
+
+import numexpr
+import numpy as np
+import torch
+import torch.nn as nn
+import yaml
+from torch.cuda import amp
+from torch.optim import SGD, Adam, lr_scheduler
+from torchsummary import summary
+from tqdm import tqdm
+
+from comic_text_detector.basemodel import TextDetector
+from comic_text_detector.utils.loss import BinaryDiceLoss
+
 os.environ['NUMEXPR_MAX_THREADS'] = str(numexpr.detect_number_of_cores())
 
-from seg_dataset import create_dataloader
-from utils.general import LOGGER, Loggers, CUDA, DEVICE
+from comic_text_detector.seg_dataset import create_dataloader
+from comic_text_detector.utils.general import LOGGER, Loggers, CUDA
 import random
 
 torch.random.manual_seed(0)

@@ -1,10 +1,12 @@
+import copy
+import math
 from typing import List
+
+import cv2
 import numpy as np
 from shapely.geometry import Polygon
-import math
-import copy
-from utils.imgproc_utils import union_area, xywh2xyxypoly, rotate_polygons
-import cv2
+
+from comic_text_detector.utils.imgproc_utils import union_area, xywh2xyxypoly, rotate_polygons
 
 LANG_LIST = ['eng', 'ja', 'unknown']
 LANGCLS2IDX = {'eng': 0, 'ja': 1, 'unknown': 2}

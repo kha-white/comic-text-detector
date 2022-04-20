@@ -1,20 +1,22 @@
 import json
-from basemodel import TextDetBase, TextDetBaseDNN
 import os.path as osp
-from tqdm import tqdm
-import numpy as np
-import cv2
-import torch
-from pathlib import Path
-import torch
-from utils.yolov5_utils import non_max_suppression
-from utils.db_utils import SegDetectorRepresenter
-from utils.io_utils import imread, imwrite, find_all_imgs, NumpyEncoder
-from utils.imgproc_utils import letterbox, xyxy2yolo, get_yololabel_strings
-from utils.textblock import TextBlock, group_output, visualize_textblocks
-from utils.textmask import refine_mask, refine_undetected_mask, REFINEMASK_INPAINT, REFINEMASK_ANNOTATION
 from pathlib import Path
 from typing import Union
+
+import cv2
+import numpy as np
+import torch
+from tqdm import tqdm
+
+from comic_text_detector.basemodel import TextDetBase, TextDetBaseDNN
+from comic_text_detector.utils.db_utils import SegDetectorRepresenter
+from comic_text_detector.utils.imgproc_utils import letterbox, xyxy2yolo, get_yololabel_strings
+from comic_text_detector.utils.io_utils import imread, imwrite, find_all_imgs, NumpyEncoder
+from comic_text_detector.utils.textblock import TextBlock, group_output, visualize_textblocks
+from comic_text_detector.utils.textmask import refine_mask, refine_undetected_mask, REFINEMASK_INPAINT, \
+    REFINEMASK_ANNOTATION
+from comic_text_detector.utils.yolov5_utils import non_max_suppression
+
 
 def model2annotations(model_path, img_dir_list, save_dir, save_json=False):
     if isinstance(img_dir_list, str):

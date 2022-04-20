@@ -1,19 +1,11 @@
-
-from cv2 import imshow
-from matplotlib import lines
-import numpy as np
-import onnxruntime
-import cv2
-import torch
 import onnx
-from basemodel import TextDetBase
 import onnxsim
-from models.yolov5.common import Conv
-from models.yolov5.yolo import Detect
+import torch
 import torch.nn as nn
-import time
-from seg_dataset import letterbox
-from utils.yolov5_utils import fuse_conv_and_bn
+
+from comic_text_detector.models.yolov5.common import Conv
+from comic_text_detector.models.yolov5.yolo import Detect
+
 
 class SiLU(nn.Module):  # export-friendly version of nn.SiLU()
     @staticmethod

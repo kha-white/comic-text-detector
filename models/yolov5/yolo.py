@@ -1,8 +1,10 @@
-from operator import mod
-from cv2 import imshow
-from utils.yolov5_utils import scale_img
 from copy import deepcopy
+from pathlib import Path
+
+from comic_text_detector.utils.yolov5_utils import scale_img, check_version, check_anchor_order, initialize_weights, \
+    fuse_conv_and_bn, make_divisible
 from .common import *
+
 
 class Detect(nn.Module):
     stride = None  # strides computed during build

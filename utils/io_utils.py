@@ -1,10 +1,10 @@
-import os
-import os.path as osp
 import glob
+import json
+import os.path as osp
 from pathlib import Path
+
 import cv2
 import numpy as np
-import json
 
 IMG_EXT = ['.bmp', '.jpg', '.png', '.jpeg']
 

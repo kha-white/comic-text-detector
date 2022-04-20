@@ -1,25 +1,16 @@
-from copy import copy
-from http.client import IM_USED
+import os.path as osp
 import pathlib
 import shutil
+
 import PIL
-import cv2
-
-import numpy as np
-import os.path as osp
-import os
-from PIL import Image, ImageColor, ImageFont, ImageDraw, ImageFilter, ImageOps
-import random
-
-from numpy.random import rand
-from trdg.utils import load_dict, load_fonts
-from tqdm import tqdm
 import pandas as pd
-import sys
-sys.path.append(os.getcwd())
-from utils.io_utils import find_all_imgs, imread, imwrite
-from utils.imgproc_utils import *
-import copy
+from PIL import Image, ImageFont, ImageDraw
+from numpy.random import rand
+from tqdm import tqdm
+from trdg.utils import load_dict
+
+from comic_text_detector.utils.imgproc_utils import *
+from comic_text_detector.utils.io_utils import find_all_imgs, imread, imwrite
 
 ALIGN_LEFT = 0
 ALIGN_CENTER = 1

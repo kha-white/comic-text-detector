@@ -3,32 +3,19 @@ import os
 import os.path as osp
 import random
 from itertools import repeat
-from multiprocessing.pool import Pool, ThreadPool
+from multiprocessing.pool import ThreadPool
 from pathlib import Path
-from threading import Thread
-from zipfile import ZipFile
 
 import cv2
 import numpy as np
-from numpy.lib.npyio import load
-from numpy.random import rand
 import torch
-import torch.nn.functional as F
-from torch.utils import data
-from torchvision.transforms.transforms import Compose
-
-from torch.utils.data import Dataset
-from tqdm import tqdm
-from pathlib import Path
-
-from tqdm import tqdm
-
-from torchvision import transforms
-import random
+from numpy.random import rand
 from torch.utils.data import DataLoader, Dataset
-from utils.general import LOGGER, Loggers, CUDA, DEVICE
-from utils.imgproc_utils import resize_keepasp, letterbox
-from utils.io_utils import imread, imwrite
+from torchvision import transforms
+from tqdm import tqdm
+
+from comic_text_detector.utils.general import LOGGER
+from comic_text_detector.utils.imgproc_utils import resize_keepasp, letterbox
 
 WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))  # DPP
 NUM_THREADS = min(8, max(1, os.cpu_count() - 1))  # number of multiprocessing threads
