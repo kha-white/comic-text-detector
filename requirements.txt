@@ -9,3 +9,4 @@ tqdm>=4.41.0
 numpy
 wandb
 trdg
+pyclipper
