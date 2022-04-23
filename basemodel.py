@@ -7,10 +7,11 @@ from torchsummary import summary
 
 from comic_text_detector.models.yolov5.common import C3, Conv
 from comic_text_detector.models.yolov5.yolo import load_yolov5_ckpt
-from comic_text_detector.utils.general import DEVICE
 from comic_text_detector.utils.weight_init import init_weights
 from comic_text_detector.utils.yolov5_utils import fuse_conv_and_bn
 
+CUDA = True if torch.cuda.is_available() else False
+DEVICE = 'cuda' if CUDA else 'cpu'
 TEXTDET_MASK = 0
 TEXTDET_DET = 1
 TEXTDET_INFERENCE = 2

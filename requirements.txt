@@ -10,3 +10,5 @@ numpy
 wandb
 trdg
 pyclipper
+torchsummary
+shapely
