@@ -16,6 +16,8 @@ TEXTDET_MASK = 0
 TEXTDET_DET = 1
 TEXTDET_INFERENCE = 2
 
+torch.set_flush_denormal(True)
+
 class double_conv_up_c3(nn.Module):
     def __init__(self, in_ch, mid_ch, out_ch, act=True):
         super(double_conv_up_c3, self).__init__()
