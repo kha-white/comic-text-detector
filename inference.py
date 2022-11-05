@@ -41,7 +41,7 @@ def model2annotations(model_path, img_dir_list, save_dir, save_json=False):
         for blk in blk_list:
             polys += blk.lines
             blk_xyxy.append(blk.xyxy)
-            blk_dict_list.append(blk.to_dict(extra_info=True))
+            blk_dict_list.append(blk.to_dict())
         blk_xyxy = xyxy2yolo(blk_xyxy, im_w, im_h)
         if blk_xyxy is not None:
             cls_list = [1] * len(blk_xyxy)
@@ -143,14 +143,20 @@ class TextDetector:
     @torch.no_grad()
     def __call__(self, img, refine_mode=REFINEMASK_INPAINT, keep_undetected_mask=False):
         img_in, ratio, dw, dh = preprocess_img(img, input_size=self.input_size, device=self.device, half=self.half, to_tensor=self.backend=='torch')
-
         im_h, im_w = img.shape[:2]
 
         blks, mask, lines_map = self.net(img_in)
-        
+
         resize_ratio = (im_w / (self.input_size[0] - dw), im_h / (self.input_size[1] - dh))
         blks = postprocess_yolo(blks, self.conf_thresh, self.nms_thresh, resize_ratio)
+
+        if self.backend == 'opencv':
+            if mask.shape[1] == 2:     # some version of opencv spit out reversed result
+                tmp = mask
+                mask = lines_map
+                lines_map = tmp
         mask = postprocess_mask(mask)
+
         lines, scores = self.seg_rep(self.input_size, lines_map)
         box_thresh = 0.6
         idx = np.where(scores[0] > box_thresh)
@@ -198,7 +204,8 @@ def traverse_by_dict(img_dir_list, dict_dir):
 if __name__ == '__main__':
     device = 'cpu'
     model_path = 'data/comictextdetector.pt'
-    # model_path = 'data/comictextdetector.pt.onnx'
+    model_path = 'data/comictextdetector.pt.onnx'
     img_dir = r'data/examples'
     save_dir = r'data/backup'
-    model2annotations(model_path, img_dir, save_dir)
+    model2annotations(model_path, img_dir, save_dir, save_json=True)
+    traverse_by_dict(img_dir, save_dir)
