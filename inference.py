@@ -71,49 +71,130 @@ def model2annotations(model_path, img_dir_list, save_dir, save_json=False):
         imwrite(osp.join(save_dir, imgname), img)
         imwrite(osp.join(save_dir, maskname), mask_refined)
 
-def preprocess_img(img, input_size=(1024, 1024), device='cpu', bgr2rgb=True, half=False, to_tensor=True):
-    if bgr2rgb:
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+_DEVICE_DIVISORS = {}
+
+
+def _divisor_255(device):
+    """Per-device fp32 tensor holding 255.0."""
+    key = str(device)
+    d = _DEVICE_DIVISORS.get(key)
+    if d is None:
+        # Dividing by a Python scalar takes ATen's reciprocal-multiply fast path
+        # (a * (1/255)), which differs from correctly rounded division for 126
+        # of the 256 uint8 values; an fp32 tensor divisor is correctly rounded.
+        d = torch.tensor(255.0, dtype=torch.float32, device=device)
+        _DEVICE_DIVISORS[key] = d
+    return d
+
+
+def letterbox_input(img, input_size=(1024, 1024)):
+    """Letterbox a BGR uint8 page and return (img_u8 (1,3,H,W), ratio, dw, dh)."""
+    # The BGR->RGB conversion before the letterbox and the channel reversal
+    # after it cancel exactly (resize and padding are per-channel), so the
+    # network has always been fed BGR.
     img_in, ratio, (dw, dh) = letterbox(img, new_shape=input_size, auto=False, stride=64)
-    if to_tensor:
-        img_in = img_in.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
-        img_in = np.array([np.ascontiguousarray(img_in)]).astype(np.float32) / 255
-        if to_tensor:
-            img_in = torch.from_numpy(img_in).to(device)
-            if half:
-                img_in = img_in.half()
+    img_in = np.ascontiguousarray(img_in.transpose((2, 0, 1)))[None]  # HWC -> NCHW, uint8
     return img_in, ratio, int(dw), int(dh)
 
-def postprocess_mask(img: Union[torch.Tensor, np.ndarray], thresh=None):
-    # img = img.permute(1, 2, 0)
-    if isinstance(img, torch.Tensor):
-        img = img.squeeze_()
-        if img.device != 'cpu':
-            img = img.detach_().cpu()
-        img = img.numpy()
+
+def normalize_input(img_u8, device='cpu', half=False):
+    """Normalise a uint8 (1,3,H,W) array or CPU tensor to the network input on device."""
+    if isinstance(img_u8, torch.Tensor):
+        img_np = img_u8.numpy() if img_u8.device.type == 'cpu' else None
     else:
-        img = img.squeeze()
+        img_np = img_u8
+    dev = torch.device(device)
+    if dev.type == 'cuda':
+        # uint8->fp32 is exact, and dividing by an fp32 tensor(255) on the
+        # device is correctly rounded, so this equals the numpy path.
+        t = img_u8 if isinstance(img_u8, torch.Tensor) else torch.from_numpy(img_u8)
+        t = t.to(dev, non_blocking=True)
+        t = t.to(torch.float32) / _divisor_255(t.device)
+    else:
+        assert img_np is not None, 'normalize_input: expected a host tensor'
+        t = torch.from_numpy(img_np.astype(np.float32) / 255)
+        if dev.type != 'cpu':
+            t = t.to(dev)
+    if half:
+        t = t.half()
+    return t
+
+
+def preprocess_img(img, input_size=(1024, 1024), device='cpu', bgr2rgb=True, half=False, to_tensor=True):
+    if not to_tensor:
+        # opencv-dnn backend: unchanged original behaviour
+        if bgr2rgb:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_in, ratio, (dw, dh) = letterbox(img, new_shape=input_size, auto=False, stride=64)
+        return img_in, ratio, int(dw), int(dh)
+    img_u8, ratio, dw, dh = letterbox_input(img, input_size)
+    return normalize_input(img_u8, device=device, half=half), ratio, dw, dh
+
+
+def mask_to_uint8(mask):
+    """Post-sigmoid mask tensor (1,1,H,W) or (H,W) -> uint8 HxW tensor on the same device."""
+    mask = mask.squeeze()
+    if mask.device.type == 'cpu':
+        return torch.from_numpy((mask.numpy() * 255).astype(np.uint8))
+    # Scale on the device: only 1 MB crosses to the host instead of 4 MB.
+    return (mask * 255).to(torch.uint8)
+
+
+def postprocess_mask(img: Union[torch.Tensor, np.ndarray], thresh=None):
+    if isinstance(img, torch.Tensor):
+        img = img.detach().squeeze()
+        if thresh is not None:
+            img = img > thresh
+        return mask_to_uint8(img.to(torch.float32) if img.dtype == torch.bool else img).cpu().numpy()
+    img = img.squeeze()
     if thresh is not None:
         img = img > thresh
     img = img * 255
-    # if isinstance(img, torch.Tensor):
-
     return img.astype(np.uint8)
+
+
+def scale_yolo(det, resize_ratio):
+    """Second half of postprocess_yolo (after NMS and the copy to host)."""
+    det[..., [0, 2]] = det[..., [0, 2]] * resize_ratio[0]
+    det[..., [1, 3]] = det[..., [1, 3]] * resize_ratio[1]
+    blines = det[..., 0:4].astype(np.int32)
+    confs = np.round(det[..., 4], 3)
+    cls = det[..., 5].astype(np.int32)
+    return blines, cls, confs
+
+
+def postprocess_detections(det, mask_u8, lines_map, im_w, im_h, input_size, dw, dh, seg_rep):
+    """Map the network output back to page coordinates and build the block list."""
+    resize_ratio = (im_w / (input_size[0] - dw), im_h / (input_size[1] - dh))
+    blks = scale_yolo(det, resize_ratio)
+
+    lines, scores = seg_rep(input_size, lines_map)
+    box_thresh = 0.6
+    idx = np.where(scores[0] > box_thresh)
+    lines, scores = lines[0][idx], scores[0][idx]
+
+    # map output to input img
+    mask = mask_u8[: mask_u8.shape[0]-dh, : mask_u8.shape[1]-dw]
+    mask = cv2.resize(mask, (im_w, im_h), interpolation=cv2.INTER_LINEAR)
+    if lines.size == 0 :
+        lines = []
+    else :
+        lines = lines.astype(np.float64)
+        lines[..., 0] *= resize_ratio[0]
+        lines[..., 1] *= resize_ratio[1]
+        lines = lines.astype(np.int32)
+    blk_list = group_output(blks, lines, im_w, im_h, mask)
+    return mask, blk_list
+
 
 def postprocess_yolo(det, conf_thresh, nms_thresh, resize_ratio, sort_func=None):
     det = non_max_suppression(det, conf_thresh, nms_thresh)[0]
     # bbox = det[..., 0:4]
     if det.device != 'cpu':
         det = det.detach_().cpu().numpy()
-    det[..., [0, 2]] = det[..., [0, 2]] * resize_ratio[0]
-    det[..., [1, 3]] = det[..., [1, 3]] * resize_ratio[1]
     if sort_func is not None:
         det = sort_func(det)
-
-    blines = det[..., 0:4].astype(np.int32)
-    confs = np.round(det[..., 4], 3)
-    cls = det[..., 5].astype(np.int32)
-    return blines, cls, confs
+    return scale_yolo(det, resize_ratio)
 
 class TextDetector:
     lang_list = ['eng', 'ja', 'unknown']
@@ -139,40 +220,53 @@ class TextDetector:
         self.conf_thresh = conf_thresh
         self.nms_thresh = nms_thresh
         self.seg_rep = SegDetectorRepresenter(thresh=0.3)
+        # Caller sets this after moving self.net to channels_last.
+        self.channels_last = False
+
+    @torch.no_grad()
+    def forward(self, img_in):
+        """Run the net + NMS on the model device; returns (det, mask_u8, lines_map)."""
+        if self.channels_last:
+            img_in = img_in.contiguous(memory_format=torch.channels_last)
+        blks, mask, lines_map = self.net(img_in)
+        det = non_max_suppression(blks, self.conf_thresh, self.nms_thresh)[0]
+        return det, mask_to_uint8(mask), lines_map[:, :1]
 
     @torch.no_grad()
     def __call__(self, img, refine_mode=REFINEMASK_INPAINT, keep_undetected_mask=False):
-        img_in, ratio, dw, dh = preprocess_img(img, input_size=self.input_size, device=self.device, half=self.half, to_tensor=self.backend=='torch')
         im_h, im_w = img.shape[:2]
-
-        blks, mask, lines_map = self.net(img_in)
-
-        resize_ratio = (im_w / (self.input_size[0] - dw), im_h / (self.input_size[1] - dh))
-        blks = postprocess_yolo(blks, self.conf_thresh, self.nms_thresh, resize_ratio)
-
         if self.backend == 'opencv':
+            img_in, ratio, dw, dh = preprocess_img(img, input_size=self.input_size, device=self.device, half=self.half, to_tensor=False)
+            blks, mask, lines_map = self.net(img_in)
+            resize_ratio = (im_w / (self.input_size[0] - dw), im_h / (self.input_size[1] - dh))
+            blks = postprocess_yolo(blks, self.conf_thresh, self.nms_thresh, resize_ratio)
             if mask.shape[1] == 2:     # some version of opencv spit out reversed result
                 tmp = mask
                 mask = lines_map
                 lines_map = tmp
-        mask = postprocess_mask(mask)
-
-        lines, scores = self.seg_rep(self.input_size, lines_map)
-        box_thresh = 0.6
-        idx = np.where(scores[0] > box_thresh)
-        lines, scores = lines[0][idx], scores[0][idx]
-        
-        # map output to input img
-        mask = mask[: mask.shape[0]-dh, : mask.shape[1]-dw]
-        mask = cv2.resize(mask, (im_w, im_h), interpolation=cv2.INTER_LINEAR)
-        if lines.size == 0 :
-            lines = []
-        else :
-            lines = lines.astype(np.float64)
-            lines[..., 0] *= resize_ratio[0]
-            lines[..., 1] *= resize_ratio[1]
-            lines = lines.astype(np.int32)
-        blk_list = group_output(blks, lines, im_w, im_h, mask)
+            mask = postprocess_mask(mask)
+            lines, scores = self.seg_rep(self.input_size, lines_map)
+            box_thresh = 0.6
+            idx = np.where(scores[0] > box_thresh)
+            lines, scores = lines[0][idx], scores[0][idx]
+            mask = mask[: mask.shape[0]-dh, : mask.shape[1]-dw]
+            mask = cv2.resize(mask, (im_w, im_h), interpolation=cv2.INTER_LINEAR)
+            if lines.size == 0 :
+                lines = []
+            else :
+                lines = lines.astype(np.float64)
+                lines[..., 0] *= resize_ratio[0]
+                lines[..., 1] *= resize_ratio[1]
+                lines = lines.astype(np.int32)
+            blk_list = group_output(blks, lines, im_w, im_h, mask)
+        else:
+            img_u8, ratio, dw, dh = letterbox_input(img, self.input_size)
+            img_in = normalize_input(img_u8, device=self.device, half=self.half)
+            det, mask_u8, lines_map = self.forward(img_in)
+            mask, blk_list = postprocess_detections(
+                det.detach().cpu().numpy(), mask_u8.cpu().numpy(), lines_map.detach().cpu(),
+                im_w, im_h, self.input_size, dw, dh, self.seg_rep,
+            )
         mask_refined = refine_mask(img, mask, blk_list, refine_mode=refine_mode)
         if keep_undetected_mask:
             mask_refined = refine_undetected_mask(img, mask, mask_refined, blk_list, refine_mode=refine_mode)
